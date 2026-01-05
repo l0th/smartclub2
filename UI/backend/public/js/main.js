@@ -433,7 +433,16 @@ async function initSocket() {
     }
 
     currentUsername = user.username;
-    socket = io("http://localhost:8080");
+    // Chọn URL Socket.IO động:
+    // - Nếu đang chạy trên localhost → dùng backend local (http://localhost:8080)
+    // - Nếu chạy production → dùng server Socket.IO trên Render
+    const SOCKET_IO_URL =
+      window.SOCKET_IO_URL ||
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:8080'
+        : 'https://chat-server-5s97.onrender.com');
+
+    socket = io(SOCKET_IO_URL);
 
     socket.on("connect", () => {
       console.log("✅ Socket.IO connected:", socket.id);
