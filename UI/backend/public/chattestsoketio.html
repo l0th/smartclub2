@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>SmartClub Chat Web</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI';
+      background: #f5f7fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .chat {
+      width: 400px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    .messages {
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .msg {
+      padding: 5px 10px;
+      border-radius: 6px;
+      margin: 5px 0;
+    }
+    .msg.me { background: #1976d2; color: white; text-align: right; }
+    .msg.other { background: #e0e0e0; color: #333; text-align: left; }
+    input {
+      width: 80%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      padding: 8px 12px;
+      background: #1976d2;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat">
+    <h3>SmartClub Chat Demo</h3>
+    <div id="messages" class="messages"></div>
+    <input id="msg" placeholder="Nhập tin nhắn..." />
+    <button onclick="send()">Gửi</button>
+  </div>
+
+  <script>
+    const socket = io("http://localhost:8080");
+    const messages = document.getElementById("messages");
+    const testUsername = "testuser_" + Math.random().toString(36).substr(2, 9);
+    const testReceiver = "reception01";
+
+    socket.on("connect", () => {
+      console.log("✅ Kết nối thành công:", socket.id);
+      socket.emit("identify", { username: testUsername });
+    });
+
+    socket.on("private_message", (data) => {
+      const el = document.createElement("div");
+      el.className = "msg other";
+      el.textContent = data.message || "[File: " + (data.fileName || "unknown") + "]";
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+    });
+
+    socket.on("message_sent", () => {
+      console.log("✅ Tin nhắn đã được gửi");
+    });
+
+    socket.on("message_error", (error) => {
+      console.error("❌ Lỗi:", error);
+      alert("Lỗi gửi tin nhắn: " + (error.error || "Unknown error"));
+    });
+
+    function send() {
+      const input = document.getElementById("msg");
+      const text = input.value.trim();
+      if (!text) return;
+
+      const el = document.createElement("div");
+      el.className = "msg me";
+      el.textContent = text;
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+
+      socket.emit("private_message", {
+        from: testUsername,
+        to: testReceiver,
+        message: text
+      });
+
+      input.value = "";
+    }
+  </script>
+</body>
+</html>
