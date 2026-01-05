@@ -571,6 +571,8 @@ async function sendMessage() {
   btn.disabled = true;
 
   try {
+    const token = typeof getToken === "function" ? getToken() : null;
+
     let fileData = null;
     let fileName = null;
     let fileType = null;
@@ -586,6 +588,10 @@ async function sendMessage() {
       to: receptionistUsername || "receptionist",
       message: text || "",
     };
+
+    if (token) {
+      messageData.authToken = token;
+    }
 
     if (fileData) {
       messageData.fileData = fileData;
