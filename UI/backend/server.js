@@ -97,8 +97,21 @@ io.on('connection', (socket) => {
 
   socket.on('private_message', async (data) => {
     try {
+      console.log('📨 [Socket] Received private_message:', {
+        from: data.from,
+        to: data.to,
+        hasMessage: !!data.message,
+        hasFile: !!data.fileData,
+        fileName: data.fileName || 'N/A'
+      });
+
       const { from, to, message, fileData, fileName, fileType } = data;
-      if (!from || !to || (!message && !fileData)) return;
+      
+      if (!from || !to || (!message && !fileData)) {
+        console.warn('⚠️ [Socket] Invalid message data - missing required fields');
+        socket.emit('message_error', { error: 'Missing required fields: from, to, and message or file' });
+        return;
+      }
 
       const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -106,18 +119,27 @@ io.on('connection', (socket) => {
       let fileDataUrl = null;
       let fileSize = null;
       if (fileData && fileName) {
-        fileBuffer = Buffer.from(fileData, 'base64');
-        fileSize = fileBuffer.length;
+        try {
+          fileBuffer = Buffer.from(fileData, 'base64');
+          fileSize = fileBuffer.length;
 
-        if (fileSize > MAX_FILE_SIZE) {
-          socket.emit('message_error', { error: 'File size exceeds 10MB limit' });
+          if (fileSize > MAX_FILE_SIZE) {
+            console.warn('⚠️ [Socket] File size exceeds limit:', fileSize);
+            socket.emit('message_error', { error: 'File size exceeds 10MB limit' });
+            return;
+          }
+
+          const mimeType = fileType || 'application/octet-stream';
+          fileDataUrl = `data:${mimeType};base64,${fileData}`;
+          console.log('📎 [Socket] File processed:', { fileName, fileSize, fileType: mimeType });
+        } catch (fileError) {
+          console.error('❌ [Socket] Error processing file:', fileError);
+          socket.emit('message_error', { error: 'Failed to process file: ' + fileError.message });
           return;
         }
-
-        const mimeType = fileType || 'application/octet-stream';
-        fileDataUrl = `data:${mimeType};base64,${fileData}`;
       }
 
+      console.log('💾 [Socket] Saving message to database...');
       await chatService.saveMessage(
         from,
         to,
@@ -128,9 +150,11 @@ io.on('connection', (socket) => {
         null,
         fileSize
       );
+      console.log('✅ [Socket] Message saved to database successfully');
 
       const targetSocketId = userSockets[to];
       if (targetSocketId) {
+        console.log('📤 [Socket] Sending message to receiver:', to, 'socket:', targetSocketId);
         io.to(targetSocketId).emit('private_message', {
           from,
           to,
@@ -140,12 +164,20 @@ io.on('connection', (socket) => {
           fileType,
           timestamp: new Date().toISOString()
         });
+      } else {
+        console.warn('⚠️ [Socket] Receiver not online:', to);
       }
 
       socket.emit('message_sent', { success: true });
+      console.log('✅ [Socket] Message sent confirmation sent to sender');
     } catch (error) {
-      console.error('❌ Private message error:', error);
-      socket.emit('message_error', { error: 'Failed to send message' });
+      console.error('❌ [Socket] Private message error:', error);
+      console.error('   - Error message:', error.message);
+      console.error('   - Error stack:', error.stack);
+      socket.emit('message_error', { 
+        error: 'Failed to send message: ' + (error.message || 'Unknown error'),
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   });
 

@@ -67,15 +67,47 @@ router.post('/messages', authenticateToken, async (req, res) => {
       }
     }
 
+    console.log('📨 [API] POST /api/chat/messages - Saving message via REST API');
     await chatService.saveMessage(username, targetReceiver, message || '', fileBuffer, fileName, fileType, filePath, fileSize);
+    console.log('✅ [API] POST /api/chat/messages - Message saved successfully');
 
     res.json({
       success: true,
       message: 'Message saved successfully'
     });
   } catch (error) {
-    console.error('Save message error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ [API] POST /api/chat/messages - Error:', error);
+    console.error('   - Error message:', error.message);
+    console.error('   - Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Test endpoint to check database connection
+router.get('/test-db', async (req, res) => {
+  try {
+    const { query } = require('../config/database');
+    const testSql = 'SELECT COUNT(*) as count FROM chat_history';
+    const result = await query(testSql);
+    res.json({
+      success: true,
+      message: 'Database connection successful',
+      data: {
+        totalMessages: result[0].count,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('❌ [API] GET /api/chat/test-db - Database test failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Database connection failed',
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

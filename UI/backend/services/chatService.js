@@ -54,16 +54,40 @@ async function getChatHistory(userId, limit = 50) {
 }
 
 async function saveMessage(sender, receiver, message, fileData = null, fileName = null, fileType = null, filePath = null, fileSize = null) {
-  try {
-    const sql = `
-      INSERT INTO chat_history (sender, receiver, message, file_data, file_path, file_name, file_type, file_size, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    `;
+  const sql = `
+    INSERT INTO chat_history (sender, receiver, message, file_data, file_path, file_name, file_type, file_size, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `;
 
-    await query(sql, [sender, receiver, message, fileData, filePath, fileName, fileType, fileSize]);
+  const params = [sender, receiver, message, fileData, filePath, fileName, fileType, fileSize];
+  
+  try {
+    console.log('💾 [saveMessage] Attempting to save message to database:');
+    console.log('   - Sender:', sender);
+    console.log('   - Receiver:', receiver);
+    console.log('   - Message length:', message ? message.length : 0);
+    console.log('   - Has file:', !!fileData);
+    console.log('   - File name:', fileName || 'N/A');
+    console.log('   - File size:', fileSize || 0);
+    console.log('   - SQL:', sql);
+    console.log('   - Params:', params.map((p, i) => {
+      if (Buffer.isBuffer(p)) return `[Buffer: ${p.length} bytes]`;
+      if (p === null) return 'NULL';
+      if (typeof p === 'string' && p.length > 100) return `[String: ${p.length} chars]`;
+      return p;
+    }));
+
+    const result = await query(sql, params);
+    console.log('✅ [saveMessage] Message saved successfully. Insert ID:', result.insertId || 'N/A');
     return true;
   } catch (error) {
-    console.error('saveMessage error:', error);
+    console.error('❌ [saveMessage] Error saving message to database:');
+    console.error('   - Error message:', error.message);
+    console.error('   - Error code:', error.code);
+    console.error('   - SQL State:', error.sqlState);
+    console.error('   - SQL:', sql);
+    console.error('   - Params:', params);
+    console.error('   - Stack:', error.stack);
     throw error;
   }
 }
