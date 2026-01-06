@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartClub - Kết quả thanh toán</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <img src="images/logo.png" alt="SmartClub" class="logo" onerror="this.style.display='none'">
+      
+      <div id="loading" style="text-align: center; padding: 40px;">
+        <div class="loading-spinner"></div>
+        <p>Đang xử lý kết quả thanh toán...</p>
+      </div>
+
+      <div id="success" style="display: none; text-align: center; padding: 40px;">
+        <div style="font-size: 64px; color: #4caf50; margin-bottom: 20px;">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <h2 style="color: #4caf50; margin-bottom: 15px;">Thanh toán thành công!</h2>
+        <p id="successMessage" style="color: #666; margin-bottom: 30px;">Giao dịch của bạn đã được xử lý thành công. Gói dịch vụ đã được kích hoạt.</p>
+        <button onclick="goToMemberPage()" style="background: #1976d2; color: white; padding: 12px 30px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">
+          Quay lại trang thành viên
+        </button>
+      </div>
+
+      <div id="failed" style="display: none; text-align: center; padding: 40px;">
+        <div style="font-size: 64px; color: #f44336; margin-bottom: 20px;">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </div>
+        <h2 style="color: #f44336; margin-bottom: 15px;">Thanh toán thất bại</h2>
+        <p id="failedMessage" style="color: #666; margin-bottom: 30px;"></p>
+        <button onclick="goToMemberPage()" style="background: #999; color: white; padding: 12px 30px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-right: 10px;">
+          Quay lại
+        </button>
+        <button onclick="retryPayment()" style="background: #1976d2; color: white; padding: 12px 30px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">
+          Thử lại
+        </button>
+      </div>
+
+      <div id="error" style="display: none; text-align: center; padding: 40px;">
+        <div style="font-size: 64px; color: #ff9800; margin-bottom: 20px;">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h2 style="color: #ff9800; margin-bottom: 15px;">Lỗi xử lý</h2>
+        <p id="errorMessage" style="color: #666; margin-bottom: 30px;"></p>
+        <button onclick="goToMemberPage()" style="background: #1976d2; color: white; padding: 12px 30px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">
+          Quay lại trang thành viên
+        </button>
+      </div>
+    </div>
+  </div>
+
+<<<<<<< HEAD
+  <script src="js/i18n.js"></script>
+=======
+>>>>>>> 3f7cc1bf2d306e49363b5fbf1bc1e3565f9e3960
+  <script src="js/api.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const loading = document.getElementById('loading');
+      const success = document.getElementById('success');
+      const failed = document.getElementById('failed');
+      const errorDiv = document.getElementById('error');
+
+      const vnpParams = {};
+      for (const [key, value] of urlParams.entries()) {
+        vnpParams[key] = value;
+      }
+
+      if (!vnpParams.vnp_TxnRef) {
+        loading.style.display = 'none';
+        errorDiv.style.display = 'block';
+        document.getElementById('errorMessage').textContent = 'Thiếu thông tin giao dịch. Vui lòng thử lại.';
+        return;
+      }
+
+      try {
+        const result = await api.confirmVnpayPayment(vnpParams);
+
+        loading.style.display = 'none';
+
+        if (result.success) {
+          success.style.display = 'block';
+          setTimeout(() => {
+            goToMemberPage();
+          }, 5000);
+        } else {
+          failed.style.display = 'block';
+          const errorMessages = {
+            '00': 'Giao dịch thành công',
+            '07': 'Trừ tiền thành công. Giao dịch bị nghi ngờ (liên quan tới lừa đảo, giao dịch bất thường).',
+            '09': 'Thẻ/Tài khoản chưa đăng ký dịch vụ InternetBanking',
+            '10': 'Xác thực thông tin thẻ/tài khoản không đúng quá 3 lần',
+            '11': 'Đã hết hạn chờ thanh toán. Xin vui lòng thực hiện lại giao dịch.',
+            '12': 'Thẻ/Tài khoản bị khóa.',
+            '13': 'Nhập sai mật khẩu xác thực giao dịch (OTP). Xin vui lòng thực hiện lại giao dịch.',
+            '51': 'Tài khoản không đủ số dư để thực hiện giao dịch.',
+            '65': 'Tài khoản đã vượt quá hạn mức giao dịch trong ngày.',
+            '75': 'Ngân hàng thanh toán đang bảo trì.',
+            '79': 'Nhập sai mật khẩu đăng nhập Internet Banking quá số lần quy định.',
+            '99': 'Lỗi không xác định được từ ngân hàng.'
+          };
+
+          const responseCode = vnpParams.vnp_ResponseCode || result.data?.responseCode;
+          let errorMessage = 'Thanh toán không thành công. Vui lòng thử lại.';
+          if (responseCode && errorMessages[responseCode]) {
+            errorMessage = errorMessages[responseCode];
+          } else if (result.error) {
+            errorMessage = result.error;
+          }
+
+          document.getElementById('failedMessage').textContent = errorMessage;
+        }
+      } catch (error) {
+        loading.style.display = 'none';
+        errorDiv.style.display = 'block';
+        document.getElementById('errorMessage').textContent = error.message || 'Lỗi khi xử lý thanh toán. Vui lòng thử lại.';
+      }
+    });
+
+    function goToMemberPage() {
+      window.location.href = 'member.html';
+    }
+
+    function retryPayment() {
+      window.location.href = 'member.html#renew';
+    }
+  </script>
+</body>
+</html>
+
