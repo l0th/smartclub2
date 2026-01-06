@@ -181,7 +181,8 @@ async function loadMemberPage() {
           return;
         }
       } catch (error) {
-        console.error("Failed to get user:", error);
+        const msg = window.i18n ? window.i18n.t('error.load_user_failed') : 'Không thể tải thông tin người dùng';
+        console.error(msg + ':', error);
         window.location.href = "index.html";
         return;
       }
@@ -218,7 +219,8 @@ async function loadMemberPage() {
         card.value.cardCode || "N/A";
     } else {
       if (card.status === "rejected") {
-        console.warn("Card info error:", card.reason);
+        const msg = window.i18n ? window.i18n.t('error.card_info') : 'Lỗi thông tin thẻ';
+        console.warn(msg + ':', card.reason);
       }
       document.getElementById("cardId").textContent = "N/A";
     }
@@ -232,7 +234,8 @@ async function loadMemberPage() {
         formatDate(packageInfo.value.endDate) || "N/A";
     } else {
       if (packageInfo.status === "rejected") {
-        console.warn("Package info error:", packageInfo.reason);
+        const msg = window.i18n ? window.i18n.t('error.package_info') : 'Lỗi thông tin gói dịch vụ';
+        console.warn(msg + ':', packageInfo.reason);
       }
       document.getElementById("plan").textContent = "N/A";
       document.getElementById("start").textContent = "N/A";
@@ -249,7 +252,8 @@ async function loadMemberPage() {
         : history.value.data.length;
       displayHistory(history.value.data, total);
     } else if (history.status === "rejected") {
-      console.warn("History error:", history.reason);
+      const msg = window.i18n ? window.i18n.t('error.history') : 'Lỗi lịch sử';
+      console.warn(msg + ':', history.reason);
       showHistoryError();
     }
 
@@ -267,7 +271,8 @@ async function loadMemberPage() {
     await loadChatHistory();
     await loadRewards();
   } catch (error) {
-    console.error("Load member page error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_member_page') : 'Lỗi tải trang thành viên';
+    console.error(msg + ':', error);
     showError("Không thể tải dữ liệu. Vui lòng thử lại!");
   }
 }
@@ -304,8 +309,26 @@ async function loadPlans() {
         })
         .join("");
     }
+    
+    // Thêm event listener cho payment select
+    const paymentSelect = document.getElementById("paymentSelect");
+    if (paymentSelect) {
+      paymentSelect.addEventListener("change", function() {
+        const renewMsg = document.getElementById("renewMsg");
+        const paymentMethod = this.value;
+        const underDevelopmentMethods = ["Chuyển khoản ngân hàng", "Ví điện tử"];
+        
+        if (underDevelopmentMethods.includes(paymentMethod)) {
+          const msg = window.i18n ? window.i18n.t('message.payment_under_development') : 'Chức năng đang được phát triển, vui lòng chọn phương thức khác';
+          renewMsg.innerHTML = `<p style="color: orange; font-weight: bold; padding: 10px; background: #fff3cd; border-radius: 5px; border: 1px solid #ffc107; margin-top: 10px;">${msg}</p>`;
+        } else {
+          renewMsg.innerHTML = "";
+        }
+      });
+    }
   } catch (error) {
-    console.error("Load plans error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_plans') : 'Lỗi tải danh sách gói dịch vụ';
+    console.error(msg + ':', error);
   }
 }
 
@@ -323,6 +346,14 @@ async function confirmRenew() {
   if (!planId) {
     renewMsg.innerHTML =
       '<p style="color: red;">Vui lòng chọn gói dịch vụ!</p>';
+    return;
+  }
+
+  // Kiểm tra các phương thức thanh toán đang phát triển
+  const underDevelopmentMethods = ["Chuyển khoản ngân hàng", "Ví điện tử"];
+  if (underDevelopmentMethods.includes(paymentMethod)) {
+    const msg = window.i18n ? window.i18n.t('message.payment_under_development') : 'Chức năng đang được phát triển, vui lòng chọn phương thức khác';
+    renewMsg.innerHTML = `<p style="color: orange; font-weight: bold; padding: 10px; background: #fff3cd; border-radius: 5px; border: 1px solid #ffc107;">${msg}</p>`;
     return;
   }
 
@@ -396,16 +427,50 @@ async function initSocket() {
     const userKey = window.SMARTCLUB_USER_KEY || "smartclub_user";
     const user = JSON.parse(localStorage.getItem(userKey));
     if (!user || !user.username) {
-      console.error("No username found");
+      const msg = window.i18n ? window.i18n.t('error.no_username') : 'Không tìm thấy tên người dùng';
+      console.error(msg);
       return;
     }
 
     currentUsername = user.username;
-    socket = io("http://localhost:8080");
+    // Socket.IO server - dùng cùng origin với frontend (Railway hoặc local)
+    // Cho phép override bằng window.SOCKET_IO_URL nếu cần
+    const SOCKET_IO_URL = window.SOCKET_IO_URL || window.location.origin;
+
+    console.log('🔌 [Socket] Connecting to:', SOCKET_IO_URL);
+    socket = io(SOCKET_IO_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 20000
+    });
 
     socket.on("connect", () => {
       console.log("✅ Socket.IO connected:", socket.id);
+      console.log("   - Transport:", socket.io.engine.transport.name);
       socket.emit("identify", { username: currentUsername });
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("❌ Socket.IO connection error:", error);
+      console.error("   - Error type:", error.type);
+      console.error("   - Error message:", error.message);
+      showError("Không thể kết nối đến server. Vui lòng thử lại!");
+    });
+
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("🔄 Socket.IO reconnected after", attemptNumber, "attempts");
+      socket.emit("identify", { username: currentUsername });
+    });
+
+    socket.on("reconnect_error", (error) => {
+      console.error("❌ Socket.IO reconnection error:", error);
+    });
+
+    socket.on("reconnect_failed", () => {
+      console.error("❌ Socket.IO reconnection failed after all attempts");
+      showError("Không thể kết nối lại đến server. Vui lòng tải lại trang!");
     });
 
     socket.on("private_message", (data) => {
@@ -430,24 +495,29 @@ async function initSocket() {
         data.timestamp,
         filePath,
         data.fileName,
-        data.fileType
+        data.fileType,
+        data.fileData
       );
     });
 
     socket.on("message_sent", () => {
-      console.log("Message sent successfully");
+      const msg = window.i18n ? window.i18n.t('success.message_sent') : 'Tin nhắn đã được gửi thành công';
+      console.log(msg);
     });
 
     socket.on("message_error", (error) => {
-      console.error("Message error:", error);
-      showError("Không thể gửi tin nhắn. Vui lòng thử lại!");
+      const msg = window.i18n ? window.i18n.t('error.message') : 'Lỗi tin nhắn';
+      console.error(msg + ':', error);
+      const errorMessage = error.error || error.message || "Không thể gửi tin nhắn. Vui lòng thử lại!";
+      showError(errorMessage);
     });
 
     socket.on("disconnect", () => {
       console.log("Socket.IO disconnected");
     });
   } catch (err) {
-    console.error("❌ Socket.IO connection error:", err);
+    const msg = window.i18n ? window.i18n.t('error.socket_connection') : 'Lỗi kết nối Socket.IO';
+    console.error("❌ " + msg + ":", err);
   }
 }
 
@@ -496,13 +566,15 @@ async function loadChatHistory() {
         msg.timestamp || msg.created_at,
         msg.file_path,
         msg.file_name,
-        msg.file_type
+        msg.file_type,
+        msg.file_data
       );
     });
 
     chatEmpty.style.display = "none";
   } catch (error) {
-    console.error("Load chat history error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_chat_history') : 'Lỗi tải lịch sử chat';
+    console.error(msg + ':', error);
     showError("Không thể tải lịch sử chat");
   } finally {
     chatLoading.style.display = "none";
@@ -514,7 +586,7 @@ async function sendMessage() {
   const btn = document.getElementById("btnSend");
   const text = input.value.trim();
 
-  if ((!text && !selectedFile) || !socket || !currentUsername) return;
+  if ((!text && !selectedFile) || !currentUsername) return;
 
   if (!receptionistUsername) {
     await getReceptionistUsername();
@@ -533,24 +605,51 @@ async function sendMessage() {
       fileType = getFileType(selectedFile.name);
     }
 
-    const messageData = {
-      from: currentUsername,
-      to: receptionistUsername || "receptionist",
-      message: text || "",
-    };
+    // Kiểm tra Socket.IO có kết nối được không
+    const useSocketIO = socket && socket.connected;
 
-    if (fileData) {
-      messageData.fileData = fileData;
-      messageData.fileName = fileName;
-      messageData.fileType = fileType;
+    if (useSocketIO) {
+      // Gửi qua Socket.IO (real-time)
+      console.log('📤 [Send] Using Socket.IO for real-time delivery');
+      const messageData = {
+        from: currentUsername,
+        to: receptionistUsername || "receptionist",
+        message: text || "",
+      };
+
+      if (fileData) {
+        messageData.fileData = fileData;
+        messageData.fileName = fileName;
+        messageData.fileType = fileType;
+      }
+
+      socket.emit("private_message", messageData);
+    } else {
+      // Fallback: Gửi qua REST API (luôn lưu vào DB)
+      console.log('📤 [Send] Socket.IO not connected, using REST API fallback');
+      try {
+        await api.saveMessage(
+          text || "",
+          receptionistUsername || "receptionist",
+          null, // filePath
+          fileName,
+          fileType,
+          fileData // Thêm fileData vào API call
+        );
+        console.log('✅ [Send] Message saved via REST API');
+      } catch (apiError) {
+        console.error('❌ [Send] REST API error:', apiError);
+        throw apiError;
+      }
     }
 
-    socket.emit("private_message", messageData);
-
+    // Hiển thị message ngay lập tức (optimistic UI)
     if (text) {
       addMessage("user", text, "Bạn", new Date().toISOString());
     }
-    if (selectedFile) {
+    if (selectedFile && fileData) {
+      const mimeType = fileType || 'application/octet-stream';
+      const fileDataUrl = `data:${mimeType};base64,${fileData}`;
       addMessage(
         "user",
         "",
@@ -558,7 +657,8 @@ async function sendMessage() {
         new Date().toISOString(),
         null,
         fileName,
-        fileType
+        fileType,
+        fileDataUrl
       );
     }
 
@@ -567,8 +667,9 @@ async function sendMessage() {
     document.getElementById("selectedFileName").style.display = "none";
     document.getElementById("fileInput").value = "";
   } catch (error) {
-    console.error("Send message error:", error);
-    showError("Không thể gửi tin nhắn!");
+    const msg = window.i18n ? window.i18n.t('error.send_message') : 'Lỗi gửi tin nhắn';
+    console.error(msg + ':', error);
+    showError("Không thể gửi tin nhắn: " + (error.message || "Lỗi không xác định"));
   } finally {
     btn.disabled = false;
   }
@@ -666,7 +767,8 @@ async function getReceptionistUsername() {
   try {
     receptionistUsername = await api.getReceptionistUsername();
   } catch (error) {
-    console.error("Error getting receptionist username:", error);
+    const msg = window.i18n ? window.i18n.t('error.get_receptionist') : 'Lỗi lấy thông tin lễ tân';
+    console.error(msg + ':', error);
     receptionistUsername = "receptionist";
   }
 }
@@ -759,7 +861,8 @@ async function loadMoreHistory() {
       showHistoryError();
     }
   } catch (error) {
-    console.error("Load more history error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_more_history') : 'Lỗi tải thêm lịch sử';
+    console.error(msg + ':', error);
     showHistoryError();
   } finally {
     loadMoreBtn.disabled = false;
@@ -775,7 +878,8 @@ function addMessage(
   timestamp = null,
   filePath = null,
   fileName = null,
-  fileType = null
+  fileType = null,
+  fileData = null
 ) {
   const box = document.getElementById("chatBox");
   if (!box) return;
@@ -798,15 +902,15 @@ function addMessage(
     el.appendChild(textEl);
   }
 
-  if (filePath || fileName) {
+  if (fileData || filePath || fileName) {
     const fileEl = document.createElement("div");
     fileEl.className = "file-attachment";
 
-    if (filePath && fileType && fileType.startsWith("image/")) {
+    const imageSource = fileData || (filePath && filePath.startsWith("http") ? filePath : filePath ? `http://localhost:8080/api/uploads/${filePath}` : null);
+
+    if (imageSource && fileType && fileType.startsWith("image/")) {
       const img = document.createElement("img");
-      img.src = filePath.startsWith("http")
-        ? filePath
-        : `http://localhost:8080/api/uploads/${filePath}`;
+      img.src = imageSource;
       img.alt = fileName || "Image";
       img.onerror = function () {
         this.style.display = "none";
@@ -816,11 +920,7 @@ function addMessage(
 
     if (fileName) {
       const link = document.createElement("a");
-      link.href = filePath
-        ? filePath.startsWith("http")
-          ? filePath
-          : `http://localhost:8080/api/uploads/${filePath}`
-        : "#";
+      link.href = imageSource || "#";
       link.target = "_blank";
       link.innerHTML = `<i class="fa-solid fa-file"></i> ${fileName}`;
       fileEl.appendChild(link);
@@ -866,7 +966,8 @@ async function loadForgotCardTab() {
       if (empty) empty.style.display = "block";
     }
   } catch (error) {
-    console.error("Load forgot card passcode error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_forgot_card') : 'Lỗi tải passcode quên thẻ';
+    console.error(msg + ':', error);
     if (empty) empty.style.display = "block";
   } finally {
     if (loading) loading.style.display = "none";
@@ -892,7 +993,8 @@ function generateQRCode(passcode) {
   }
 
   if (typeof QRCode === "undefined") {
-    console.warn("QRCode library not loaded, attempting to load...");
+    const msg = window.i18n ? window.i18n.t('error.qrcode_not_loaded') : 'Thư viện QRCode chưa được tải, đang thử tải...';
+    console.warn(msg);
     loadQRCodeLibrary()
       .then(() => {
         generateQRCode(passcode);
@@ -916,7 +1018,8 @@ function generateQRCode(passcode) {
       correctLevel: 1,
     });
   } catch (error) {
-    console.error("QR code generation exception:", error);
+    const msg = window.i18n ? window.i18n.t('error.qrcode_generation') : 'Lỗi tạo QR code';
+    console.error(msg + ':', error);
     qrContainer.innerHTML =
       '<p style="color: red; font-size: 12px;">Lỗi tạo QR code</p>';
   }
@@ -1125,8 +1228,10 @@ async function copyForgotCardPasscode() {
       }, 2000);
     }
   } catch (err) {
-    console.error("Failed to copy:", err);
-    alert("Không thể sao chép. Vui lòng sao chép thủ công: " + passcode);
+    const msg = window.i18n ? window.i18n.t('error.copy_failed') : 'Sao chép thất bại';
+    console.error(msg + ':', err);
+    const alertMsg = window.i18n ? window.i18n.t('message.cannot_copy', { text: passcode }) : "Không thể sao chép. Vui lòng sao chép thủ công: " + passcode;
+    alert(alertMsg);
   }
 }
 
@@ -1138,7 +1243,8 @@ async function loadMemberPoints() {
       pointsElement.textContent = points || 0;
     }
   } catch (error) {
-    console.error("Load member points error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_points') : 'Lỗi tải điểm tích lũy';
+    console.error(msg + ':', error);
   }
 }
 
@@ -1200,7 +1306,8 @@ async function loadRewards() {
     html += "</div>";
     rewardsContainer.innerHTML = html;
   } catch (error) {
-    console.error("Load rewards error:", error);
+    const msg = window.i18n ? window.i18n.t('error.load_rewards') : 'Lỗi tải danh sách quà';
+    console.error(msg + ':', error);
     const rewardsContainer = document.getElementById("rewardsContainer");
     if (rewardsContainer) {
       rewardsContainer.innerHTML =
@@ -1223,17 +1330,21 @@ async function redeemReward(rewardId) {
     const result = await api.redeemReward(rewardId);
 
     if (result.success) {
-      alert(result.message || "Đổi quà thành công!");
+      const successMsg = window.i18n ? window.i18n.t('success.redeem_success') : "Đổi quà thành công!";
+      alert(result.message || successMsg);
       await loadMemberPoints();
       await loadRewards();
     } else {
-      alert(result.error || "Đổi quà thất bại");
+      const failMsg = window.i18n ? window.i18n.t('message.redeem_failed') : "Đổi quà thất bại";
+      alert(result.error || failMsg);
       btn.disabled = false;
       btn.textContent = originalText;
     }
   } catch (error) {
-    console.error("Redeem reward error:", error);
-    alert(error.message || "Lỗi khi đổi quà. Vui lòng thử lại!");
+    const msg = window.i18n ? window.i18n.t('error.redeem_reward') : 'Lỗi đổi quà';
+    console.error(msg + ':', error);
+    const alertMsg = window.i18n ? window.i18n.t('message.redeem_error') : "Lỗi khi đổi quà. Vui lòng thử lại!";
+    alert(error.message || alertMsg);
     btn.disabled = false;
     btn.textContent = originalText;
   }
@@ -1279,7 +1390,8 @@ async function generateVnpayUrl(paymentId, amount, planName) {
       }
     }
   } catch (error) {
-    console.warn('Failed to get VNPay config, using defaults:', error);
+    const msg = window.i18n ? window.i18n.t('error.vnpay_config') : 'Không thể lấy cấu hình VNPay, sử dụng mặc định';
+    console.warn(msg + ':', error);
   }
 
   const vnp_HashSecret = "ZKUNPZCP7S0FPKZRLF30ZA7WA4CZ15UP";
